@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Accident Duration Prediction</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.0.3/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.0.3/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <style>
+        p {
+  font-size: 1.25em;
+  text-indent: 30px;
+}
+        ol {
+  font-size: 1.25em;
+}
+        ul {
+  font-size: 1.25em;
+}
+        body {
+  padding-bottom: 1000px;
+}
+    </style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-default navbar-fixed-top">
+    <div class="container">
+        <div class="navbar-header">
+            <a class="navbar-brand" href="/">U.S. Traffic Accident Duration</a>
+        </div>
+        <div id="navbar" class="collapse navbar-collapse">
+            <ul class="nav navbar-nav">
+                <li><a href="https://github.com/Tapeless">Contact</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+
+<div class="jumbotron">
+    <div class="container">
+        <h1 class="text-center">Accident Duration Predictor</h1>
+        <p class="text-center">Using immediately available accident data to predict the duration traffic is impacted for.</p>
+        <hr />
+        <form method="post" action="/prediction">
+            <div class="row">
+                <div class="col-sm-4">
+                    Nearby Road Features:
+                    {% for road_feature in road_features %}
+                        <div class="checkbox">
+                            <label><input type="checkbox" name={{road_feature}} placeholder="">{{ road_feature }}</label>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="col-sm-4">
+                    <div class="form-group">
+                            <label for="sel1">Daytime / Nighttime:</label>
+                            <select class="form-control" id="sel1" name="TimeOfDay">
+                            <option value="Sunrise_Sunset_Day">Daytime</option>
+                            <option value="Sunrise_Sunset_Night">Nighttime</option>
+                            </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sel1">Weather:</label>
+                        <select class="form-control" id="sel1" name="weather">
+                        {% for type in weather_types %}
+                        <option value={{ type }}>{{ type }}</option>
+                        {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sel1">Day of the Week:</label>
+                        <select class="form-control" id="sel1" name="Day">
+                        {% for day in days %}
+                        <option value={{ day }}>{{ day }}</option>
+                        {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sel1">Hour of the day</label>
+                        <select class="form-control" id="sel1" name="Hour">
+                        {% for hour in hours %}
+                        <option value={{ hour }}>{{ hour }}</option>
+                        {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    {% for con_feature in con_features %}
+                    <div class="form-group">
+                        <label for={{ con_feature[0] }}>{{ con_feature[0] }}</label>
+                        <input type="number" class="form-control" min= {{ con_feature[1] }} max={{ con_feature[2] }} step="1" id={{ con_feature[0] }} placeholder={{ con_feature[1] }} name={{ con_feature[0] }}>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-lg-offset-5">
+                    <button type="submit" class="btn btn-lg btn-success" value="prediction" >Predict Duration</button>
+                </div>
+            </div>
+        </form>
+            <div class="row">
+                <div class="col-sm-12">
+                    <div id="chart" class="chart"></div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-12">
+                    {{ text_out }}
+                    {% if params %}
+                        Params: <br> {{ params }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% block message %}
+        {% endblock %}
+    </div>
+</div>
+
+<div class="container">
+        <div class="page-header">
+            <h1 class="text-center">Overview</h1>
+        </div>
+        <h2 class="text-center">Background / Motivation</h2>
+        <p>
+            In the U.S., personal vehicles remain the most common form of travel. Most of us depend upon routing and map applications in order to get to new places - or even just to quickly check traffic conditions. I frequently use Google maps for this purpose!
+            One of the most convenient features is the ability to see real time accident locations, and impact on traffic. I would check most days before leaving work to see which freeway I should take to get home.
+            This feature is great for immediate checks, but can it still work for trips planned in the near future? When experimenting with Google maps, I could not see accident data when using the 'Depart At' function.
+            Using data available when an accident is detected/reported, can we predict how long the accident will impact traffic for, and then use this information to dictate whether or not the accident is factored into routing for near future trips?
+        </p>
+            <h2 class="text-center">Dataset</h2>
+            <p>The US Accidents dataset currently contains metadata for ~2.8 million car accidents between 2016-2021. The data contains 47 values, including accident severity, human description of accident, weather features, nearby road features, start/end location, and more.  This dataset can be found <a href="https://www.kaggle.com/datasets/sobhanmoosavi/us-accidents">on Kaggle</a>.
+                <br>
+                References:
+                <ul>
+                    <li><cite>Moosavi, Sobhan, Mohammad Hossein Samavatian, Srinivasan Parthasarathy, and Rajiv Ramnath. <a href="https://arxiv.org/abs/1906.05409">"A Countrywide Traffic Accident Dataset.”</a>, 2019.</cite></li>
+                    <li><cite>Moosavi, Sobhan, Mohammad Hossein Samavatian, Srinivasan Parthasarathy, Radu Teodorescu, and Rajiv Ramnath. 
+                    <a href="https://arxiv.org/abs/1909.09638">"Accident Risk Prediction based on Heterogeneous Sparse Data: New Dataset and Insights." </a> In proceedings of the 27th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems, ACM, 2019.</cite></li>
+                </ul>
+            </p>
+            <h2 class="text-center">Data Processing & Analysis (<a href="https://github.com/Tapeless/Accident_Traffic_Duration/blob/trunk/data_processing.ipynb">Notebook</a>)</h2>
+            <div class="text-center"><img src="../static/corr_mat.png" class="img-fluid" alt="Correlation Matrix of select features from dataset"></div>
+            <h3 class="text-center">Accident Duration</h3> 
+            <p>
+            The Start_Time and End_Time columns in the dataset are stored as strings. To construct the duration feature, I created a function to convert the strings to datetime objects, then took the difference between the two.
+            I also created a function to just return the datetime objects in order to create features for the day of the week & hour of the day. The dataset's datetime strings contained 3 slightly different formats, which I had to account for:</p>
+            <pre><code class="python">def to_datetime(row):
+            '''
+            returns datetime object of Start_Time value in given row
+            '''
+            format_t = "%Y-%m-%d %H:%M:%S"
+        
+            if len(row["Start_Time"]) == 19:
+                dt = datetime.strptime(row["Start_Time"], format_t)
+            
+            elif len(row["Start_Time"]) == 26:
+                dt = datetime.strptime(row["Start_Time"][:-7], format_t)
+            
+            elif len(row["Start_Time"]) == 29:
+                dt = datetime.strptime(row["Start_Time"][:-10], format_t)
+            
+            return dt
+            </code></pre>
+            <p>
+            About 350,000 accidents (~12% of the dataset) had an exact 6 hour duration.
+            I removed all entries at this exact time, since it would've had a high impact on our predictions & did not seem to fit in with the distribution. I also removed all entries where the duration was longer than 1 day,
+            as these are significant outliers and could heavily skew our predictions.
+            <div class="text-center"><img src="../static/duration_hist.png" class="img-fluid" alt="Accident Duration Distribution"></div>
+            <div class="row">
+                <div class="col-sm-6">
+                    <img src="../static/Hour.png" class="img-responsive" alt="Hour vs Duration">
+                </div>
+                <div class="col-sm-6">
+                    <img src="../static/Day.png" class="img-responsive" alt="Day vs Duration">
+                </div>
+            </div>
+        </p>
+            <h3 class="text-center">Weather</h3> 
+            <p>
+            Next, I investigated the weather features. The Weather column itself had 117 unique values with a lot of overlap, and things that were captured in other features. For example, one category is 'Heavy Rain Shower / Windy'.
+            There is already a wind speed feature outside of this column, and within this column, other values include 'Drizzle / Windy', 'Rain Showers', among more. To reduce the feature set & remove overlap, I mapped these down to 10 categories:
+            <pre><code>def narrow_weather(row):
+            #define keywords to categorize by
+            keywords = {
+                "rain" : "rain", "storm" : "storm", "drizzle" : "rain", "snow" : "snow", "sleet" : "snow", "fair" : "fair", "clear" : "fair", 
+                "windy" : "windy", "fog" : "fog", "haze" : "fog", "hail" : "hail", "thunder" : "storm", "overcast" : "cloudy", 
+                "cloud" : "cloudy", "wintry" : "snow", "drizzle" : "rain", "mist" : "fog", "smoke" : "smoke", "shower" : "rain", 
+                "precipitation" : "rain", "dust" : "dust", "ice" : "hail", "sand" : "dust", "squall" : "storm"}
+                    
+            entry = np.nan
+            for k, v in keywords.items():
+                if k in row["Weather_Condition"].lower():
+                    entry = v
+
+            return entry</code></pre>
+
+                <p>Among the other weather related features available, I chose to keep Visibility, Wind Speed, Temperature, and Precipitation.
+                The precipitation feature contained some null values, but most are present where the weather is fair. I filled these values to 0, as to not drop relevant data and also contain situations where we may have wet/rainy/snowy weather with no active precipitation.
+                I dropped all wind speeds above ~70mph from dataset, roughly based on where sustained wind speeds are causing structural damage. Less than 100 datapoints contained wind speeds above this threshold, so the impact on the model should be minimal.</p>
+                <div class="row">
+                    <div class="col-sm-12">
+                        <div class="text-center"><img src="../static/weather.png" class="img-fluid" alt="Weather vs Duration"></div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-6">
+                        <img src="../static/Wind_Speed(mph).png" class="img-responsive" alt="Wind Speed (mph) vs Duration">
+                    </div>
+                    <div class="col-sm-6">
+                        <img src="../static/Temperature(F).png" class="img-responsive" alt="Temperature (F) vs Duration">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-6">
+                        <img src="../static/Visibility(mi).png" class="img-responsive" alt="Temperature (F) vs Duration">
+                    </div>
+                    <div class="col-sm-6">
+                        <img src="../static/Precipitation(in).png" class="img-responsive" alt="Precipitation (in) vs Duration">
+                    </div>
+                </div>
+            </p>
+            <h3 class="text-center">Location</h3> 
+            <p>
+                The dataset contains State & County columns. I experimented with including a unique State_County feature in this model using one-hot encoding, but it did not improve performance much (on regression, R2 score increased by ~.04) but drastically increased training time.
+                This also does not contain each county in the US, so I decided to drop this pursuit.
+            </p>
+            <h3 class="text-center">Nearby Road Features</h3> 
+            <p>
+                The data also contains information on road features near the accident. Of those present: Junction, Stop, Traffic_Signal, Station, Give_Way, Crossing & Railway are kept for this model.
+                None of the values are null, so no data trimming is necessary! The mean values are plotted below. It is expected that the mean duration where these features are not present (False) are all about the same, but we see deviation in where it is present.
+                <div class="text-center"><img src="../static/road_features.png" class="img-fluid" alt="Road Features vs Duration"></div>
+            </p>
+            <h2 class="text-center">Building the Model (<a href="https://github.com/Tapeless/Accident_Traffic_Duration/blob/trunk/model_exploration.ipynb">Notebook</a>)</h2>
+            <p>
+            I initially approached this problem using regression - the predicted feature is continuous, so it makes sense! I used the GradientBoostingRegressor available through sklearn.
+            The first R2 score the model achieved (on training and test data) was ~0.08.
+            Through including more features (like the State_County feature mentioned above) and hyperparameter tuning with GridSearchCV, I was able to achieve an R2 of 0.12 - better, but still pretty bad.
+            At this point, I reconsidered the envisioned use case of this model - being able to <i>approximately</i> predict an accident's duration of impact on traffic, in order to optimize routing in the near future.
+            I didn't necessarily need to predict within a few minutes.
+            So, I changed to a categorical prediction model!
+            </p>
+            <br>
+            <p>
+            To do this, I created a new column in the dataframe based off of the duration column I constructed earlier. Six categories were used: 0-15 minutes, 16-30 minutes, 31-60 minutes, 61-180 minues, 180-360 minutes, 361+ minutes.</p>
+            <pre><code>
+            df['ETA'] = 0
+            df.loc[df['duration(min)'] <= 15, 'ETA'] = 0 
+            df.loc[(df['duration(min)'] <= 30) & (df["duration(min)"] > 15), 'ETA'] = 1
+            df.loc[(df['duration(min)'] <= 60) & (df["duration(min)"] > 30), 'ETA'] = 2
+            df.loc[(df['duration(min)'] <= 180) & (df["duration(min)"] > 60), 'ETA'] = 3
+            df.loc[(df['duration(min)'] <= 360) & (df["duration(min)"] > 180), 'ETA'] = 4
+            df.loc[df['duration(min)'] > 360, 'ETA'] = 5
+            </code></pre>
+            <p>
+            Now, we have 6 categories to fit into, which widens the goalpost substantially, while hardly affecting the usefulness of our model. 
+            Using XGBoost's softprob within GridSearchCV, we are able to achieve 60% accuracy (params: learning_rate: 0.2, max_depth: 14, n_estimators: 200)! </p>
+            <pre><code>def prep_data(df):
+            cat_vals = ["weather", "Junction", "Stop", "Traffic_Signal", "Sunrise_Sunset", "Day", "Hour", "Station", "Give_Way", "Crossing", "Railway"]
+            con_vals = ["Visibility(mi)", "Precipitation(in)", "Temperature(F)", "Wind_Speed(mph)"]
+            x = df[cat_vals+con_vals]
+            y = df['ETA']
+            x = x.join(pd.get_dummies(df[cat_vals]),lsuffix="_ohe")
+            x = x.drop(labels=cat_vals, axis=1)
+            y = np.array(y).ravel()
+            x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8)
+            
+            return x_train, x_test, y_train, y_test
+
+    x_train, x_test, y_train, y_test = prep_data(df)
+    estimator = xgb.XGBClassifier(objective="multi:softprob", seed=42)
+    params = {
+        "max_depth" : range(2, 20, 4),
+        "n_estimators" : range(50, 250, 50),
+        "learning_rate" : [0.2, 0.1, 0.05]
+    }
+
+    grid_search = GridSearchCV(
+        estimator=estimator,
+        param_grid=params,
+        n_jobs = -1,
+        cv = 2,
+        verbose=3
+    )
+
+    grid_search.fit(x_train, y_train)</code></pre>
+                While not amazing, this is enough for this model to be useful, and a large improvement over the regression.
+                Using the app above, we can check predicted accident duration & confidence for different parameter combinations. The 10 highest feature importances (averaged for each classification) is shown below:</p>
+                <ol>
+                    {% for weight in weights.index %}
+                    <li><b>{{ weight }}</b>: {{ weights[weight] }} </li>
+                    {% endfor %}
+                </ol>
+            <p>
+                Daytime has the highest feature importance, followed by wind speed, presence of a traffic signal/junction, etc. The day of the week was also significant - specifically if the day Saturday or Sunday.
+                The rationale for daytime being weighted highly is likely due to the volume of traffic present during daytime hours - there will be a larger impact on traffic when there is more traffic.
+                Wind speed also influenced our model income heavily. It is plausible that wind speed is a more direct measure of <b>intense</b> weather moreso than our actual weather feature.
+                The general feature importances match up with expectations, other than precipitation - I would have expected this to matter more. However, precipitation is also mostly captured in the weather feature as present/not present,
+                so that may be more important than precipitation magnitude. 
+            </p>
+            <h2 class="text-center">Use Case & Considerations</h2>
+            <p>
+                Like mentioned above, this model could be used in routing. On a mobile routing app, if a user reports an accident, the app can:
+                <ol>
+                    <li>Record the user location and report time</li>
+                    <li>Query some maps API with user location for nearby road features</li>
+                    <li>Query some weather API with user location for current weather conditions & sun position (nearest Airport)</li>
+                    <li>Input the data as a xgb.DMatrix to the model's predict method</li>
+                    <li>Use the prediction as an input to routing models - whether or not to factor in traffic impact into future route plans (factor in confidence!)</li>
+                </ol>
+                <p>Considerations:</p>
+                <ul>
+                    <li>There are many more short duration datapoints than large, so the data is imbalanced.</li>
+                    <li>Given the feature weights in the above section, nearby road features don't have a significant impact on our model. A lightweight model could be built that would not require anything but weather & time, and likely achieve performance parity.</li>
+                    <li>Depending on how the APIs the dataset was built with computed accident duration, it is plausible that accidents where there are less vehicles on the road (late night, severe weather) showed lower duration simply due to lower traffic impact. Despite this possible effect, it shouldn't impact the use case of our model.</li>
+                </ul>
+            </p>
+            <h2 class="text-center">Further Work</h2>
+            <p>
+                The dataset includes a human written description of the accident. There are surely features that could be extracted from this and used in a model - but is this information available immediately?
+                Most likely not, at least assuming that our implementation is not asking for user input while driving (dangerous!) However, it is worth looking at the impact of certain words on accident duration.
+                Below is a chart reflecting the mean duration for different words contained in the description string:
+            </p>
+            <div class="text-center"><img src="../static/desc_features.png" class="img-fluid" alt="Mean duration for different features in dataset"></div>
+            <p>
+                As seen, there is a substantial difference for some features! Where the words "closed", "blocked", or "slow" are used, the mean duration is more than twice as high.
+                Interestingly, where multi-vehicle is in the description, the accident duration is shorter. This could be due to more multi-vehicle accidents occuring on interstates or critical routes,
+                leading to responders clearing it up quickly. If there is a way to include this information at time of reporting without decreasing our theoretical app user's safety, this would definitely benefit our model.
+            </p>
+            <h2 class="text-center">Conclusions</h2>
+            <p>
+                We were able to build a model that can predict an accident duration classification, out of 6 possible outcomes, with an accuracy score of 0.6. This establishes a baseline, but could likely be improved through further 
+                feature engineering. This model can be used with other APIs to automate duration predictions for real-time traffic events, ultimately improving the near-future routing capabilities of popular applications.                
+                <br>
+
+                I am open to recommendations & collaboration on this work! Feel free to message me on twitter @Bren_Done or on <a href="https://github.com/Tapeless">github</a>!
+            </p>
+</div>
+
+<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+<script type='text/javascript'>
+  var graphs = {{ graphJSON | safe }};
+  Plotly.plot('chart',graphs,{});
+</script>
+</body>
+</html>
