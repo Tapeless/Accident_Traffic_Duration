@@ -36,7 +36,7 @@
 <nav class="navbar navbar-default navbar-fixed-top">
     <div class="container">
         <div class="navbar-header">
-            <a class="navbar-brand" href="/">U.S. Traffic Accident Duration</a>
+            <a class = "navbar-brand" href="https://medium.com/@brendonkirouac/predicting-traffic-accident-duration-with-python-4488aaca5c4a">Medium Article</a>
         </div>
         <div id="navbar" class="collapse navbar-collapse">
             <ul class="nav navbar-nav">
@@ -61,6 +61,12 @@
                             <label><input type="checkbox" name={{road_feature}} placeholder="">{{ road_feature }}</label>
                         </div>
                     {% endfor %}
+                    State:
+                        <select class="form-control" id="sel1" name="state_ordered">
+                            {% for state in states_ordered.sort_values(by=["State"])["State"].tolist() %}
+                            <option value={{ state }}>{{state}}</option>
+                            {% endfor %}
+                        </select>
                 </div>
                 <div class="col-sm-4">
                     <div class="form-group">
@@ -246,106 +252,19 @@
             <h2 class="text-center">Building the Model (<a href="https://github.com/Tapeless/Accident_Traffic_Duration/blob/trunk/model_exploration.ipynb">Notebook</a>)</h2>
             <p>
             I initially approached this problem using regression - the predicted feature is continuous, so it makes sense! I used the GradientBoostingRegressor available through sklearn.
-            The first R2 score the model achieved (on training and test data) was ~0.08.
-            Through including more features (like the State_County feature mentioned above) and hyperparameter tuning with GridSearchCV, I was able to achieve an R2 of 0.12 - better, but still pretty bad.
+            The first R2 score the model achieved (on training and test data) was ~0.12.
             At this point, I reconsidered the envisioned use case of this model - being able to <i>approximately</i> predict an accident's duration of impact on traffic, in order to optimize routing in the near future.
             I didn't necessarily need to predict within a few minutes.
             So, I changed to a categorical prediction model!
             </p>
             <br>
             <p>
-            To do this, I created a new column in the dataframe based off of the duration column I constructed earlier. Six categories were used: 0-15 minutes, 16-30 minutes, 31-60 minutes, 61-180 minues, 180-360 minutes, 361+ minutes.</p>
-            <pre><code>
-            df['ETA'] = 0
-            df.loc[df['duration(min)'] <= 15, 'ETA'] = 0 
-            df.loc[(df['duration(min)'] <= 30) & (df["duration(min)"] > 15), 'ETA'] = 1
-            df.loc[(df['duration(min)'] <= 60) & (df["duration(min)"] > 30), 'ETA'] = 2
-            df.loc[(df['duration(min)'] <= 180) & (df["duration(min)"] > 60), 'ETA'] = 3
-            df.loc[(df['duration(min)'] <= 360) & (df["duration(min)"] > 180), 'ETA'] = 4
-            df.loc[df['duration(min)'] > 360, 'ETA'] = 5
-            </code></pre>
-            <p>
+            To do this, I created a new column in the dataframe based off of the duration column I constructed earlier. Six categories were used: 0-15 minutes, 16-30 minutes, 31-60 minutes, 61-180 minues, 180-360 minutes, 361+ minutes.
             Now, we have 6 categories to fit into, which widens the goalpost substantially, while hardly affecting the usefulness of our model. 
-            Using XGBoost's softprob within GridSearchCV, we are able to achieve 60% accuracy (params: learning_rate: 0.2, max_depth: 14, n_estimators: 200)! </p>
-            <pre><code>def prep_data(df):
-            cat_vals = ["weather", "Junction", "Stop", "Traffic_Signal", "Sunrise_Sunset", "Day", "Hour", "Station", "Give_Way", "Crossing", "Railway"]
-            con_vals = ["Visibility(mi)", "Precipitation(in)", "Temperature(F)", "Wind_Speed(mph)"]
-            x = df[cat_vals+con_vals]
-            y = df['ETA']
-            x = x.join(pd.get_dummies(df[cat_vals]),lsuffix="_ohe")
-            x = x.drop(labels=cat_vals, axis=1)
-            y = np.array(y).ravel()
-            x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8)
-            
-            return x_train, x_test, y_train, y_test
-
-    x_train, x_test, y_train, y_test = prep_data(df)
-    estimator = xgb.XGBClassifier(objective="multi:softprob", seed=42)
-    params = {
-        "max_depth" : range(2, 20, 4),
-        "n_estimators" : range(50, 250, 50),
-        "learning_rate" : [0.2, 0.1, 0.05]
-    }
-
-    grid_search = GridSearchCV(
-        estimator=estimator,
-        param_grid=params,
-        n_jobs = -1,
-        cv = 2,
-        verbose=3
-    )
-
-    grid_search.fit(x_train, y_train)</code></pre>
-                While not amazing, this is enough for this model to be useful, and a large improvement over the regression.
-                Using the app above, we can check predicted accident duration & confidence for different parameter combinations. The 10 highest feature importances (averaged for each classification) is shown below:</p>
-                <ol>
-                    {% for weight in weights.index %}
-                    <li><b>{{ weight }}</b>: {{ weights[weight] }} </li>
-                    {% endfor %}
-                </ol>
+            Using XGBoost's softprob within GridSearchCV, we are able to achieve 63% accuracy!</p>                
+            <br>  
             <p>
-                Daytime has the highest feature importance, followed by wind speed, presence of a traffic signal/junction, etc. The day of the week was also significant - specifically if the day Saturday or Sunday.
-                The rationale for daytime being weighted highly is likely due to the volume of traffic present during daytime hours - there will be a larger impact on traffic when there is more traffic.
-                Wind speed also influenced our model income heavily. It is plausible that wind speed is a more direct measure of <b>intense</b> weather moreso than our actual weather feature.
-                The general feature importances match up with expectations, other than precipitation - I would have expected this to matter more. However, precipitation is also mostly captured in the weather feature as present/not present,
-                so that may be more important than precipitation magnitude. 
-            </p>
-            <h2 class="text-center">Use Case & Considerations</h2>
-            <p>
-                Like mentioned above, this model could be used in routing. On a mobile routing app, if a user reports an accident, the app can:
-                <ol>
-                    <li>Record the user location and report time</li>
-                    <li>Query some maps API with user location for nearby road features</li>
-                    <li>Query some weather API with user location for current weather conditions & sun position (nearest Airport)</li>
-                    <li>Input the data as a xgb.DMatrix to the model's predict method</li>
-                    <li>Use the prediction as an input to routing models - whether or not to factor in traffic impact into future route plans (factor in confidence!)</li>
-                </ol>
-                <p>Considerations:</p>
-                <ul>
-                    <li>There are many more short duration datapoints than large, so the data is imbalanced.</li>
-                    <li>Given the feature weights in the above section, nearby road features don't have a significant impact on our model. A lightweight model could be built that would not require anything but weather & time, and likely achieve performance parity.</li>
-                    <li>Depending on how the APIs the dataset was built with computed accident duration, it is plausible that accidents where there are less vehicles on the road (late night, severe weather) showed lower duration simply due to lower traffic impact. Despite this possible effect, it shouldn't impact the use case of our model.</li>
-                </ul>
-            </p>
-            <h2 class="text-center">Further Work</h2>
-            <p>
-                The dataset includes a human written description of the accident. There are surely features that could be extracted from this and used in a model - but is this information available immediately?
-                Most likely not, at least assuming that our implementation is not asking for user input while driving (dangerous!) However, it is worth looking at the impact of certain words on accident duration.
-                Below is a chart reflecting the mean duration for different words contained in the description string:
-            </p>
-            <div class="text-center"><img src="../static/desc_features.png" class="img-fluid" alt="Mean duration for different features in dataset"></div>
-            <p>
-                As seen, there is a substantial difference for some features! Where the words "closed", "blocked", or "slow" are used, the mean duration is more than twice as high.
-                Interestingly, where multi-vehicle is in the description, the accident duration is shorter. This could be due to more multi-vehicle accidents occuring on interstates or critical routes,
-                leading to responders clearing it up quickly. If there is a way to include this information at time of reporting without decreasing our theoretical app user's safety, this would definitely benefit our model.
-            </p>
-            <h2 class="text-center">Conclusions</h2>
-            <p>
-                We were able to build a model that can predict an accident duration classification, out of 6 possible outcomes, with an accuracy score of 0.6. This establishes a baseline, but could likely be improved through further 
-                feature engineering. This model can be used with other APIs to automate duration predictions for real-time traffic events, ultimately improving the near-future routing capabilities of popular applications.                
-                <br>
-
-                I am open to recommendations & collaboration on this work! Feel free to message me on twitter @Bren_Done or on <a href="https://github.com/Tapeless">github</a>!
+            I am open to recommendations & collaboration on this work! Feel free to message me on twitter @Bren_Done or on <a href="https://github.com/Tapeless">github</a>!
             </p>
 </div>
 

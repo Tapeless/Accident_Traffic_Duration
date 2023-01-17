@@ -12,22 +12,26 @@ from flask import Flask, render_template, request
 #df = pd.read_csv('cleaned_data.csv', index_col="Unnamed: 0")
 model = joblib.load("classifier.pkl")
 
-road_features = ["Junction", "Stop", "Traffic_Signal", "Station", "Give_Way", "Crossing", "Railway"]
-con_features =  [["Visibility(mi)",0,100], ["Precipitation(in)",0,100], ["Temperature(F)",-150,150], ["Wind_Speed(mph)",0,100]]
-weather_types = ['cloudy', 'fair', 'rain', 'fog', 'snow', 'storm', 'smoke', 'windy',
-       'dust', 'hail']
+cols = model.feature_names_in_.tolist()
+states_ordered = pd.read_csv("states_ordered.csv")
 
-days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+
+road_features = cols[5:8] + cols[9:11]
+weather_types = [x[8:] for x in cols[11:21]]
+
+#manually defining continuous features to define min/max vals in form input
+con_features =  [["Visibility(mi)",0,100], ["Precipitation(in)",0,100], ["Temperature(F)",-150,150], ["Wind_Speed(mph)",0,100]]
+
+days = [x[4:] for x in cols[-7:]]
 hours = list(range(0,24))
 
-cols = ['Junction_ohe', 'Stop_ohe', 'Traffic_Signal_ohe',
-       'Hour_ohe', 'Station_ohe', 'Give_Way_ohe', 'Crossing_ohe',
-       'Railway_ohe', 'Visibility(mi)', 'Precipitation(in)', 'Temperature(F)', 'Wind_Speed(mph)',
-       'weather_cloudy', 'weather_dust', 'weather_fair', 'weather_fog',
-       'weather_hail', 'weather_rain', 'weather_smoke', 'weather_snow',
-       'weather_storm', 'weather_windy', 'Sunrise_Sunset_Day',
-       'Sunrise_Sunset_Night', 'Day_Friday', 'Day_Monday', 'Day_Saturday',
-       'Day_Sunday', 'Day_Thursday', 'Day_Tuesday', 'Day_Wednesday']
+con_vals = cols[0:4]
+
+cat_vals = ["state_ordered","weather", "Junction", "Stop", "Traffic_Signal",
+"Sunrise_Sunset", "Day", "Hour", "Station", "Crossing"]
+
+
+
 
 weights = pd.Series(data=np.round(model.feature_importances_,3),index=cols).sort_values(ascending=False).head(10)
 
@@ -36,18 +40,22 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     return render_template("index.html", road_features=road_features, weather_types=weather_types, con_features=con_features,
-    hours=hours, days=days, weights=weights)
+    hours=hours, days=days, weights=weights, states_ordered=states_ordered)
 
 @app.route("/prediction", methods=["POST"])
 def make_prediction():
     #list of all features
-    features = road_features + [con_feature[0] for con_feature in con_features] + ["weather", "Day", "Hour", "TimeOfDay"] 
-    #object to store in
+    features = road_features + [con_feature[0] for con_feature in con_features] + ["weather", "Day", "Hour", "TimeOfDay", "state_ordered"] 
+    
+    #object to store form response in
     feature_vals = {}
     for feature in features:
+        #loop through features and get form value for each
         feature_vals[feature] = request.form.get(feature)
-    feat_df = pd.DataFrame(data=np.zeros((1,31)), columns=cols)
-    #messy, i know
+    
+    #dataframe to hold response converted to appropriate data for model
+    feat_df = pd.DataFrame(data=np.zeros((1,30)), columns=cols)
+    #loop through our columns and assign values in dataframe
     for col in cols:
         for key in feature_vals:
             if key in col:
@@ -67,12 +75,20 @@ def make_prediction():
                     if feature_vals[key] in col:
                         feat_df[col] = 1
 
-                #con value handling        
+                #state handling
+                elif key == "state_ordered":
+                    if feature_vals[key]:
+                        #assign the index (rank) of the state to df
+                        feat_df[col] = states_ordered[states_ordered["State"] == feature_vals[key]].index[0]
+
+                #con, ordinal value handling        
                 else:
                     if feature_vals[key]:
                         feat_df[col] = float(feature_vals[key])
     
+    #query model with dataframe
     pred = model.predict_proba(feat_df)[0]
+
     #define prediction graph
     fig = px.bar(pred)
     fig.update_layout(
@@ -108,4 +124,4 @@ def make_prediction():
             params += k + ": " + v + ", "
 
     return render_template("index.html", road_features=road_features, weather_types=weather_types, con_features=con_features,
-    hours=hours, days=days, weights=weights, graphJSON=graphJSON, text_out=text_out, params=params)
+    hours=hours, days=days, weights=weights, graphJSON=graphJSON, text_out=text_out, params=params, states_ordered=states_ordered)
