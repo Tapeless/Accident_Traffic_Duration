@@ -6,6 +6,8 @@
 
 This repo's main feature is a model trained on the [US Accidents Dataset](https://www.kaggle.com/datasets/sobhanmoosavi/us-accidents) that predicts the length of time an accident will impact traffic given features that can be known immediately (weather conditions, day/time, nearby road features). Individual predictions can be made and evaluated via the Flask app (app.py), and further discussion is included on the web app.
 
+To read more about this project, check out my Medium article [here!](https://medium.com/@brendonkirouac/predicting-traffic-accident-duration-with-python-4488aaca5c4a)
+
 ## Usage
 
 ### Libraries
